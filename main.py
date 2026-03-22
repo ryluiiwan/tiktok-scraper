@@ -6,7 +6,7 @@ TikTok Email Scraper - 多用户版
 """
 import asyncio, re, uuid, os
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
@@ -72,8 +72,8 @@ async def verify(body: dict):
 @app.post("/api/upload")
 async def upload(
     file: UploadFile = File(...),
-    username: str = "",
-    password: str = ""
+    username: str = Form(""),
+    password: str = Form("")
 ):
     if not verify_user(username, password):
         raise HTTPException(403, "Wrong credentials")
