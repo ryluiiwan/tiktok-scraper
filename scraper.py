@@ -1,14 +1,17 @@
 """
-优化版 scraper：整个任务只启动一次浏览器
-速度提升 3-4 倍
+优化版 scraper：
+- 复用浏览器实例
+- 浏览器崩溃自动重启
+- 支持断点续跑
 """
 import re
 import asyncio
-from playwright.async_api import async_playwright, Browser
+from playwright.async_api import async_playwright
 
 EMAIL_RE = r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
 
-async def fetch_bio_with_browser(username, browser, semaphore):
+async def fetch_one(username, browser, semaphore):
+    """抓取单个用户，复用 browser"""
     async with semaphore:
         ctx = await browser.new_context(
             user_agent=(
@@ -63,36 +66,89 @@ async def fetch_bio_with_browser(username, browser, semaphore):
 
 
 async def batch_fetch(usernames, job, df, out_path, lock, concurrency=2):
-    """复用单个浏览器实例处理所有用户，供 main.py 调用"""
+    """
+    批量抓取，浏览器崩溃自动重启，支持断点续跑
+    每50条重启一次浏览器，防止内存泄漏
+    """
+    RESTART_EVERY = 50  # 每50条重启浏览器
+
+    todo = [(idx, df.at[idx, "_username"])
+            for idx in df[df["status"] == ""].index
+            if df.at[idx, "_username"]]
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-gpu",
+        browser = None
 
-            ]
-        )
-        sem = asyncio.Semaphore(concurrency)
+        async def get_browser():
+            nonlocal browser
+            if browser:
+                try:
+                    await browser.close()
+                except:
+                    pass
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-gpu",
+                    "--memory-pressure-off",
+                ]
+            )
+            return browser
 
-        async def process(idx, username):
-            if not username:
-                return
-            result = await fetch_bio_with_browser(username, browser, sem)
-            async with lock:
-                df.at[idx, "email"]  = result["email"]
-                df.at[idx, "status"] = result["status"]
-                job["done"] += 1
-                if result["email"]: job["found"] += 1
-                job["logs"].append(f"@{username} → {result['email'] or result['status']}")
-                if len(job["logs"]) > 200: job["logs"] = job["logs"][-200:]
-                df.drop(columns=["_username"], errors="ignore").to_excel(out_path, index=False)
+        await get_browser()
 
-        todo = [(idx, df.at[idx, "_username"]) for idx in df[df["status"] == ""].index]
-        await asyncio.gather(*[process(idx, uname) for idx, uname in todo])
-        await browser.close()
+        # 分批处理，每批 RESTART_EVERY 条
+        for batch_start in range(0, len(todo), RESTART_EVERY):
+            batch = todo[batch_start: batch_start + RESTART_EVERY]
+
+            # 如果上一批浏览器崩了，重启
+            try:
+                _ = browser.is_connected()
+                if not browser.is_connected():
+                    job["logs"].append("浏览器已断开，正在重启...")
+                    await get_browser()
+            except:
+                job["logs"].append("浏览器异常，正在重启...")
+                await get_browser()
+
+            sem = asyncio.Semaphore(concurrency)
+
+            async def process(idx, username):
+                # 跳过已处理
+                if df.at[idx, "status"] != "":
+                    return
+                try:
+                    result = await fetch_one(username, browser, sem)
+                except Exception as e:
+                    result = {"username": username, "bio": "", "email": "",
+                              "status": f"error: {str(e)[:60]}"}
+
+                async with lock:
+                    df.at[idx, "email"]  = result["email"]
+                    df.at[idx, "status"] = result["status"]
+                    job["done"] += 1
+                    if result["email"]: job["found"] += 1
+                    job["logs"].append(
+                        f"@{username} → {result['email'] or result['status']}"
+                    )
+                    if len(job["logs"]) > 200:
+                        job["logs"] = job["logs"][-200:]
+                    # 每条实时保存
+                    df.drop(columns=["_username"], errors="ignore").to_excel(
+                        out_path, index=False
+                    )
+
+            await asyncio.gather(*[process(idx, uname) for idx, uname in batch])
+            job["logs"].append(f"--- 已完成 {min(batch_start+RESTART_EVERY, len(todo))}/{len(todo)} 条，重启浏览器 ---")
+
+        if browser:
+            try:
+                await browser.close()
+            except:
+                pass
 
 
 async def fetch_tiktok_bio(username, semaphore):
@@ -100,8 +156,8 @@ async def fetch_tiktok_bio(username, semaphore):
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", ]
+            args=["--no-sandbox", "--disable-dev-shm-usage"]
         )
-        result = await fetch_bio_with_browser(username, browser, semaphore)
+        result = await fetch_one(username, browser, semaphore)
         await browser.close()
         return result
