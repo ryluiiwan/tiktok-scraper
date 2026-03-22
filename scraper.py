@@ -62,7 +62,7 @@ async def fetch_bio_with_browser(username, browser, semaphore):
             await ctx.close()
 
 
-async def batch_fetch(usernames, job, df, out_path, lock, concurrency=3):
+async def batch_fetch(usernames, job, df, out_path, lock, concurrency=2):
     """复用单个浏览器实例处理所有用户，供 main.py 调用"""
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -72,7 +72,7 @@ async def batch_fetch(usernames, job, df, out_path, lock, concurrency=3):
                 "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-gpu",
-                "--single-process",
+
             ]
         )
         sem = asyncio.Semaphore(concurrency)
@@ -100,7 +100,7 @@ async def fetch_tiktok_bio(username, semaphore):
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--single-process"]
+            args=["--no-sandbox", ]
         )
         result = await fetch_bio_with_browser(username, browser, semaphore)
         await browser.close()
