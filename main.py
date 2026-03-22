@@ -83,7 +83,7 @@ async def upload(
     path.write_bytes(await file.read())
 
     df    = pd.read_excel(path)
-    count = sum(1 for u in df.get("tiktok/Instagramlink", [])
+    count = sum(1 for u in df.get("主页链接", [])
                 if re.search(r'tiktok\.com/@', str(u)))
 
     # 计算排队位置
@@ -118,7 +118,7 @@ async def run_job(job_id: str):
         m = re.search(r'tiktok\.com/@([^/?&\s]+)', str(url))
         return m.group(1) if m else ""
 
-    df["_username"] = df["tiktok/Instagramlink"].apply(get_username)
+    df["_username"] = df["主页链接"].apply(get_username)
     todo = df[df["status"] == ""].index.tolist()
     sem  = asyncio.Semaphore(3)
     lock = asyncio.Lock()
