@@ -10,7 +10,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
-from scraper import fetch_tiktok_bio
+from scraper import fetch_tiktok_bio, batch_fetch
 
 app = FastAPI()
 
@@ -113,31 +113,19 @@ async def run_job(job_id: str):
     if "email"  not in df.columns: df["email"]  = ""
     if "status" not in df.columns: df["status"] = ""
 
-    def get_username(url):
-        m = re.search(r'tiktok\.com/@([^/?&\s]+)', str(url))
-        return m.group(1) if m else ""
-
     df["_username"] = df["Handle"].str.strip()
-    todo = df[df["status"] == ""].index.tolist()
-    sem  = asyncio.Semaphore(3)
+    out_path = RESULT_DIR / f"{job_id}_result.xlsx"
     lock = asyncio.Lock()
 
-    async def process(idx):
-        uname = df.at[idx, "_username"]
-        if not uname:
-            return
-        result = await fetch_tiktok_bio(uname, sem)
-        async with lock:
-            df.at[idx, "email"]  = result["email"]
-            df.at[idx, "status"] = result["status"]
-            job["done"] += 1
-            if result["email"]: job["found"] += 1
-            job["logs"].append(f"@{uname} → {result['email'] or result['status']}")
-            if len(job["logs"]) > 200: job["logs"] = job["logs"][-200:]
-            df.drop(columns=["_username"]).to_excel(
-                RESULT_DIR / f"{job_id}_result.xlsx", index=False)
-
-    await asyncio.gather(*[process(idx) for idx in todo])
+    # 复用单个浏览器，速度提升3-4倍
+    await batch_fetch(
+        usernames=df["_username"].tolist(),
+        job=job,
+        df=df,
+        out_path=out_path,
+        lock=lock,
+        concurrency=3
+    )
     job["status"] = "done"
 
 # ── API: 查询状态 ───────────────────────────────────────────
