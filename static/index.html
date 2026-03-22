@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok Email Scraper</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e0e0f; --surface: #1a1a1c; --border: #2a2a2e;
+    --accent: #00e5a0; --accent-dim: rgba(0,229,160,0.12);
+    --text: #f0f0ee; --muted: #6b6b72;
+    --danger: #ff5f5f; --warn: #f5a623;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+  .container { width: 100%; max-width: 560px; }
+  .header { margin-bottom: 2rem; }
+  .header h1 { font-family: 'DM Mono', monospace; font-size: 1rem; font-weight: 500; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 0.3rem; }
+  .header p { font-size: 0.82rem; color: var(--muted); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  label { display: block; font-size: 0.75rem; font-family: 'DM Mono', monospace; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.5rem; }
+  input[type=text], input[type=password] { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem 0.9rem; color: var(--text); font-size: 0.88rem; outline: none; transition: border-color 0.2s; margin-bottom: 0.9rem; }
+  input:focus { border-color: var(--accent); }
+  .upload-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 2rem 1rem; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; margin-bottom: 1rem; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--accent-dim); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+  .upload-zone p { font-size: 0.83rem; color: var(--muted); margin-top: 4px; }
+  .upload-zone strong { color: var(--text); }
+  .file-tag { font-size: 0.78rem; color: var(--accent); font-family: 'DM Mono', monospace; margin-top: 6px; }
+  .btn { width: 100%; padding: 0.8rem; border-radius: 8px; border: none; font-family: 'DM Sans', sans-serif; font-size: 0.88rem; font-weight: 500; cursor: pointer; transition: opacity 0.2s, transform 0.1s; }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--accent); color: #0a1a12; }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); margin-top: 0.5rem; }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .err-msg { font-size: 0.78rem; color: var(--danger); margin-top: -0.4rem; margin-bottom: 0.8rem; }
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 1rem; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 0.8rem; text-align: center; }
+  .stat-val { font-family: 'DM Mono', monospace; font-size: 1.4rem; font-weight: 500; }
+  .stat-val.g { color: var(--accent); }
+  .stat-label { font-size: 0.68rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .prog-track { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 1rem; }
+  .prog-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s; }
+  .log { background: var(--bg); border-radius: 8px; padding: 0.8rem 1rem; max-height: 160px; overflow-y: auto; font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--muted); }
+  .log-line { padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .log-line:last-child { border-bottom: none; }
+  .log-line.ok { color: var(--accent); }
+  .log-line.er { color: var(--danger); }
+  .queue-box { text-align: center; padding: 1.5rem 0; }
+  .queue-num { font-family: 'DM Mono', monospace; font-size: 3rem; font-weight: 500; color: var(--warn); }
+  .queue-sub { font-size: 0.83rem; color: var(--muted); margin-top: 0.5rem; }
+  .done-big { font-family: 'DM Mono', monospace; font-size: 3rem; font-weight: 500; color: var(--accent); text-align: center; padding: 1rem 0 0.25rem; }
+  .done-sub { font-size: 0.83rem; color: var(--muted); text-align: center; margin-bottom: 1rem; }
+  .user-tag { font-size: 0.75rem; color: var(--muted); font-family: 'DM Mono', monospace; margin-bottom: 1rem; }
+  .user-tag span { color: var(--accent); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>// TIKTOK EMAIL SCRAPER</h1>
+    <p>上传红人名单，自动提取 Bio 邮箱</p>
+  </div>
+
+  <!-- 登录 -->
+  <div id="s-login" class="card">
+    <label>用户名</label>
+    <input type="text" id="inp-user" placeholder="输入用户名" onkeydown="if(event.key==='Enter')login()"/>
+    <label>密码</label>
+    <input type="password" id="inp-pw" placeholder="输入密码" onkeydown="if(event.key==='Enter')login()"/>
+    <p class="err-msg hidden" id="login-err">用户名或密码错误</p>
+    <button class="btn btn-primary" onclick="login()">登录</button>
+  </div>
+
+  <!-- 上传 -->
+  <div id="s-upload" class="card hidden">
+    <div class="user-tag">当前用户：<span id="show-user"></span></div>
+    <div class="upload-zone" id="drop-zone">
+      <input type="file" id="file-inp" accept=".xlsx,.xls" onchange="onFile(this)"/>
+      <p><strong>点击上传</strong>或拖拽 Excel 文件到此处</p>
+      <p>.xlsx 格式，需包含 tiktok/Instagramlink 列</p>
+      <p class="file-tag hidden" id="file-tag"></p>
+    </div>
+    <button class="btn btn-primary" id="btn-start" disabled onclick="startJob()">开始抓取</button>
+  </div>
+
+  <!-- 排队 -->
+  <div id="s-queue" class="card hidden">
+    <div class="queue-box">
+      <div class="queue-num" id="q-num">1</div>
+      <div class="queue-sub">前面还有 <span id="q-txt">1</span> 个任务，请耐心等待</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:0.8rem;">页面每3秒自动刷新，无需手动操作</div>
+    </div>
+  </div>
+
+  <!-- 进度 -->
+  <div id="s-progress" class="card hidden">
+    <div class="stats">
+      <div class="stat"><div class="stat-val" id="st-total">0</div><div class="stat-label">总计</div></div>
+      <div class="stat"><div class="stat-val g" id="st-found">0</div><div class="stat-label">找到邮箱</div></div>
+      <div class="stat"><div class="stat-val" id="st-done">0</div><div class="stat-label">已处理</div></div>
+    </div>
+    <div class="prog-track"><div class="prog-fill" id="prog" style="width:0%"></div></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- 完成 -->
+  <div id="s-done" class="card hidden">
+    <div class="done-big" id="done-num">0</div>
+    <div class="done-sub">条邮箱成功提取</div>
+    <button class="btn btn-primary" onclick="dlResult()">下载结果 Excel</button>
+    <button class="btn btn-ghost" onclick="reset()">重新上传</button>
+  </div>
+</div>
+
+<script>
+let jobId=null, timer=null, curUser='', curPw='', chosenFile=null;
+const $=id=>document.getElementById(id);
+const SCREENS=['s-login','s-upload','s-queue','s-progress','s-done'];
+function show(id){SCREENS.forEach(s=>$(s).classList.add('hidden'));$(id).classList.remove('hidden');}
+
+async function login(){
+  const u=$('inp-user').value.trim(), p=$('inp-pw').value;
+  if(!u||!p) return;
+  const r=await fetch('/api/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+  const d=await r.json();
+  if(d.ok){curUser=u;curPw=p;$('show-user').textContent=u;show('s-upload');}
+  else $('login-err').classList.remove('hidden');
+}
+
+const dz=$('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0]);});
+function onFile(i){if(i.files[0])setFile(i.files[0]);}
+function setFile(f){chosenFile=f;$('file-tag').textContent=f.name;$('file-tag').classList.remove('hidden');$('btn-start').disabled=false;}
+
+async function startJob(){
+  if(!chosenFile) return;
+  $('btn-start').disabled=true;
+  const fd=new FormData();
+  fd.append('file',chosenFile);fd.append('username',curUser);fd.append('password',curPw);
+  const r=await fetch('/api/upload',{method:'POST',body:fd});
+  if(!r.ok){alert('上传失败');$('btn-start').disabled=false;return;}
+  const d=await r.json();
+  jobId=d.job_id;$('st-total').textContent=d.total;
+  if(d.queue_pos>0){$('q-num').textContent=d.queue_pos;$('q-txt').textContent=d.queue_pos;show('s-queue');}
+  else show('s-progress');
+  timer=setInterval(poll,3000);
+}
+
+async function poll(){
+  const r=await fetch(`/api/status/${jobId}`);
+  const d=await r.json();
+  if(d.status==='queued'){$('q-num').textContent=d.queue_pos;$('q-txt').textContent=d.queue_pos;show('s-queue');return;}
+  show('s-progress');
+  $('st-done').textContent=d.done;$('st-found').textContent=d.found;
+  const pct=d.total>0?Math.round(d.done/d.total*100):0;
+  $('prog').style.width=pct+'%';
+  $('log').innerHTML=d.logs.slice().reverse().map(l=>{
+    const ok=/@[^\s]+\.[a-z]{2,}/i.test(l)&&!l.includes('no_email')&&!l.includes('error');
+    return `<div class="log-line ${ok?'ok':l.includes('error')?'er':''}">${l}</div>`;
+  }).join('');
+  if(d.status==='done'){clearInterval(timer);$('done-num').textContent=d.found;show('s-done');}
+}
+
+function dlResult(){window.location.href=`/api/download/${jobId}`;}
+function reset(){
+  clearInterval(timer);jobId=null;chosenFile=null;
+  $('file-tag').classList.add('hidden');$('btn-start').disabled=true;
+  $('log').innerHTML='';$('prog').style.width='0%';show('s-upload');
+}
+</script>
+</body>
+</html>
